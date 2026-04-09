@@ -91,7 +91,7 @@ decide_action(PlayerID, Action) :-
     (B2PDist < 34 -> (Action = kick(TargetAX, TargetAY, Dist2Target)); 
 
     %elif close to goal 
-    (B2TgDist < 350 ->
+    (B2TgDist < 400 ->
          Action = flank(TargetAX, TargetAY , 30)
     );
             XScreen is XTg + (Xb - XTg) * 0.5, 

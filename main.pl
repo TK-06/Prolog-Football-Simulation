@@ -19,8 +19,6 @@ create_gui :-
     
     new(Dialog, dialog), 
     
-    
-
     send(Dialog, append, button(reset, message(@prolog, reset_sim))),
 
     send(Dialog, append, button(stop, message(@prolog, stop_sim, Frame))),
@@ -77,7 +75,6 @@ change_speed(SpeedArg) :-
     new(Timer, timer(NewInterval, message(@prolog, game_loop, Window))),
     send(Timer, start), asserta(main_timer(Timer)).
 
-% [CHANGED] Added specific nametags mapping for IDs and implemented text drawing.
 player_label_text(1, 'GK').
 player_label_text(2, 'DR').
 player_label_text(3, 'AR').
@@ -99,8 +96,7 @@ setup_players(Window) :-
         send(LabelVis, colour, colour(black)),
         send(Window, display, LabelVis), asserta(vis_obj(player_label(ID), LabelVis))
     )).
-
-% [CHANGED] Added nametag location updater to follow the player
+    
 update_pos_and_dir(ID, X, Y, Angle) :-
     vis_obj(player(ID), PVis), 
     vis_obj(player_dir(ID), LVis), 
@@ -116,7 +112,6 @@ update_pos_and_dir(ID, X, Y, Angle) :-
     LX is round(X - 8), LY is round(Y - 25), 
     send(LabelVis, x, LX), send(LabelVis, y, LY).
 
-% [UNCHANGED]
 game_loop(Window) :-
     % Run the math loop multiple times based on current speed selection
     sim_steps(Steps),
@@ -132,7 +127,6 @@ game_loop(Window) :-
         )
     )),
 
-    % Check final time after all math steps are done
     environment:match_time(FinalTime),
     (FinalTime =< 0 -> 
         environment:score(Red, Blue),
@@ -142,7 +136,6 @@ game_loop(Window) :-
         vis_obj(clock, CT), send(CT, string, WinnerStr) 
     ; true),
 
-    % Retrieve updated ball state and draw ONCE per frame
     environment:ball(BX, BY, _, _, _, _), vis_obj(ball, BallVis), send(BallVis, x, BX - 7), send(BallVis, y, BY - 7),
     
     forall(between(1, 6, ID), (
