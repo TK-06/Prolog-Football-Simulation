@@ -60,7 +60,7 @@ apply_action(PlayerID, goto(TX, TY)) :-
     ball(Xb,Yb,_,_,_,_),
     angleTo(X, Y, TX, TY, TargetAngle),
     angleTo(X,Y , Xb,Yb , NewFaceAngle),
-    signed_angle_diff(Angle, NewFaceAngle, TurnDiff),
+    signedAngleDiff(Angle, NewFaceAngle, TurnDiff),
     
     apply_action(PlayerID, turn(TurnDiff)),
     player(PlayerID,_,_,_,FinalFaceAngle),
