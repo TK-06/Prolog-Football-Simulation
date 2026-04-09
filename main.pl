@@ -2,30 +2,32 @@
 :- use_module(environment).
 :- use_module(sensor).
 :- use_module(ai).
-:- use_module(math_utils).
+:- use_module(utils).
 
-% [UNCHANGED] Added sim_steps/1 to track how many math calculations to do per render frame
 :- dynamic vis_obj/2, main_timer/1, sim_steps/1.
 
-% [UNCHANGED]
 start :-
     set_random(seed(random)), environment:init_env, create_gui.
 
-% [UNCHANGED]
 create_gui :-
-    new(Frame, frame('Prolog RoboCup 5v5')),
+    new(Frame, frame('Prolog RoboCup 3v3')),
     new(Window, picture), send(Window, size, size(800, 600)),
     asserta(vis_obj(window, Window)), 
     
-    % Default to 1 math step per render frame
     asserta(sim_steps(1)),
     
-    new(Dialog, dialog), 
-    send(Dialog, append, button(stop, message(@prolog, stop_sim, Frame))),
     
+    new(Dialog, dialog), 
+    
+    
+
+    send(Dialog, append, button(reset, message(@prolog, reset_sim))),
+
+    send(Dialog, append, button(stop, message(@prolog, stop_sim, Frame))),
+
     new(SpeedMenu, menu(speed, choice, message(@prolog, change_speed, @arg1))),
-    send_list(SpeedMenu, append, [0.5, 1.0, 2.0, 4.0, 8.0]),
-    send(SpeedMenu, selection, 1.0),
+    send_list(SpeedMenu, append, ['0.5', '1', '2', '4', '8']),
+    send(SpeedMenu, selection, '1'),
     send(Dialog, append, SpeedMenu),
     
     send(Frame, append, Window), 
@@ -50,19 +52,18 @@ create_gui :-
     new(Timer, timer(0.04, message(@prolog, game_loop, Window))), 
     send(Timer, start), asserta(main_timer(Timer)).
 
-% [UNCHANGED]
 stop_sim(Frame) :-
     main_timer(Timer), send(Timer, stop), send(Timer, free), retract(main_timer(Timer)),
-    send(Frame, destroy), writeln('Simulation correctly terminated.').
+    send(Frame, destroy).
 
-% [UNCHANGED]
+reset_sim :-
+    environment:init_env.
+
 change_speed(SpeedArg) :-
     (number(SpeedArg) -> SpeedMultiplier = SpeedArg ; atom_number(SpeedArg, SpeedMultiplier)),
     
     retractall(sim_steps(_)),
     
-    % If speed is less than 1, we slow down the UI timer and run 1 step.
-    % If speed is >= 1, we keep the UI timer at 0.04s, but increase the number of math steps.
     (SpeedMultiplier < 1.0 ->
         Steps = 1, NewInterval is 0.04 / SpeedMultiplier
     ;
@@ -78,19 +79,16 @@ change_speed(SpeedArg) :-
 
 % [CHANGED] Added specific nametags mapping for IDs and implemented text drawing.
 player_label_text(1, 'GK').
-player_label_text(2, 'D1').
-player_label_text(3, 'D2').
-player_label_text(4, 'A1').
-player_label_text(5, 'A2').
-player_label_text(6, 'GK').
-player_label_text(7, 'D1').
-player_label_text(8, 'D2').
-player_label_text(9, 'A1').
-player_label_text(10, 'A2').
+player_label_text(2, 'DR').
+player_label_text(3, 'AR').
+player_label_text(4, 'GK').
+player_label_text(5, 'DB').
+player_label_text(6, 'AB').
+
 
 setup_players(Window) :-
-    forall(between(1, 10, ID), (
-        (ID =< 5 -> C = red ; C = blue),
+    forall(between(1, 6, ID), (
+        (ID =< 3 -> C = red ; C = blue),
         new(PVis, circle(24)), send(PVis, fill_pattern, colour(C)),
         send(Window, display, PVis), asserta(vis_obj(player(ID), PVis)),
         new(DirLine, line(0,0,0,0)), send(Window, display, DirLine), asserta(vis_obj(player_dir(ID), DirLine)),
@@ -104,11 +102,19 @@ setup_players(Window) :-
 
 % [CHANGED] Added nametag location updater to follow the player
 update_pos_and_dir(ID, X, Y, Angle) :-
-    vis_obj(player(ID), PVis), vis_obj(player_dir(ID), LVis), vis_obj(player_label(ID), LabelVis),
-    NX is X - 12, NY is Y - 12, send(PVis, x, NX), send(PVis, y, NY),
-    EndX is X + 20 * cos(Angle), EndY is Y + 20 * sin(Angle),
-    send(LVis, start, point(X, Y)), send(LVis, end, point(EndX, EndY)),
-    LX is X - 8, LY is Y - 25, send(LabelVis, x, LX), send(LabelVis, y, LY).
+    vis_obj(player(ID), PVis), 
+    vis_obj(player_dir(ID), LVis), 
+    vis_obj(player_label(ID), LabelVis),
+    
+    NX is round(X - 12), NY is round(Y - 12), 
+    send(PVis, x, NX), send(PVis, y, NY),
+    
+    EndX is round(X + 20 * cos(Angle)), EndY is round(Y + 20 * sin(Angle)),
+    IX is round(X), IY is round(Y),
+    send(LVis, start, point(IX, IY)), send(LVis, end, point(EndX, EndY)),
+    
+    LX is round(X - 8), LY is round(Y - 25), 
+    send(LabelVis, x, LX), send(LabelVis, y, LY).
 
 % [UNCHANGED]
 game_loop(Window) :-
@@ -117,7 +123,7 @@ game_loop(Window) :-
     forall(between(1, Steps, _), (
         environment:match_time(Time),
         (Time > 0 ->
-            forall(between(1, 10, ID), (
+            forall(between(1, 6, ID), (
                 (ai:decide_action(ID, Action) -> environment:apply_action(ID, Action) ; true)
             )),
             environment:step_physics
@@ -139,7 +145,7 @@ game_loop(Window) :-
     % Retrieve updated ball state and draw ONCE per frame
     environment:ball(BX, BY, _, _, _, _), vis_obj(ball, BallVis), send(BallVis, x, BX - 7), send(BallVis, y, BY - 7),
     
-    forall(between(1, 10, ID), (
+    forall(between(1, 6, ID), (
         environment:player(ID, _, PX, PY, Angle), update_pos_and_dir(ID, PX, PY, Angle)
     )),
 

@@ -1,123 +1,169 @@
 :- module(ai, [decide_action/2]).
-:- use_module(sensor). :- use_module(environment). :- use_module(math_utils).
+:- use_module(sensor). :- use_module(environment). :- use_module(utils).
 
-role(1, goalkeeper). role(6, goalkeeper).
-role(2, defender). role(3, defender). role(7, defender). role(8, defender).
-role(4, attacker). role(5, attacker). role(9, attacker). role(10, attacker).
+role(1, goalkeeper). role(4, goalkeeper).
+role(2, defender). role(5, defender). 
+role(3, attacker). role(6, attacker).
 
-% [CHANGED] 1. GOALKEEPER: Semi-circle tracking, intercepting, and passing to defenders.
+/*
+B = ball 
+P = player 
+G = goal 
+Tg = team goal 
+Og = Opponent Goal
+DF = defender 
+ATK = attacker
+GK = GoalKeeper*/
+
+%GK
 decide_action(PlayerID, Action) :-
     role(PlayerID, goalkeeper), !,
-    environment:player(PlayerID, Team, PX, PY, _),
-    (Team == red -> TargetTeam = blue, OwnGoalX = 0, OwnGoalY = 300 ; TargetTeam = red, OwnGoalX = 800, OwnGoalY = 300),
+
+    %get pos
+    player(PlayerID, Team, Xp, Yp, _),
+    (
+        Team == red ->  Opp = blue ,XTg = 0, YTg = 300;
+        Opp = red, XTg = 800, YTg = 300
+    ),
     
-    % Give GK "absolute" vision of the ball so they don't spin looking for it
-    environment:ball(BX, BY, _, _, _, _), 
-    math_utils:distance(PX, PY, BX, BY, DistToBall),
-    math_utils:distance(OwnGoalX, OwnGoalY, BX, BY, BallToGoalCenter),
-    
-    (DistToBall < 30 ->
-        % 1. WE HAVE THE BALL: Execute a precise pass to the closest defender
-        findall(Dist-DX-DY, (
-            role(DefID, defender),
-            environment:player(DefID, Team, DX, DY, _),
-            math_utils:distance(PX, PY, DX, DY, Dist)
-        ), DefenderDistances),
-        
-        % Sort by distance and extract the closest defender's data
-        ( keysort(DefenderDistances, [_ClosestDefDist-TargetDX-TargetDY | _]) ->
-            Action = kick(TargetDX, TargetDY, 30)
-        ;
-            % Fallback: Just kick it away if no defender is found alive/registered
-            environment:goal(TargetTeam, GX, GY), Action = kick(GX, GY, 30)
-        )
-    ; BallToGoalCenter < 120 ->
-        % 2. BALL IN INTERCEPT ZONE: If the ball enters the 120-radius half-circle, charge it!
-        Action = goto(BX, BY)
-    ;
-        % 3. GUARD THE GOAL ON A SEMI-CIRCLE
-        math_utils:angle_to(OwnGoalX, OwnGoalY, BX, BY, AngleToBall),
-        
-        % Set the radius of the semi-circle (distance from goal line)
-        Radius = 50,
-        
-        TargetX is OwnGoalX + Radius * cos(AngleToBall),
-        TargetY is OwnGoalY + Radius * sin(AngleToBall),
-        
-        Action = goto(TargetX, TargetY)
+    ball(Xb, Yb, _, _, _, _), 
+    distance(Xp, Yp, Xb, Yb, B2PDist),
+    distance(XTg, YTg, Xb, Yb, B2TgDist),
+
+
+
+   ( B2TgDist < 120 -> Action = goto(Xb, Yb);
+
+    (B2PDist > 35 ->
+        angleTo(XTg, YTg, Xb, Yb, Ang2B),
+        Radius = 120,
+            
+        TargetX is XTg + Radius * cos(Ang2B),
+        TargetY is YTg + Radius * sin(Ang2B),
+            
+        Action = goto(TargetX, TargetY));
+
+   
+    %else 
+    (
+        role(OppAtkID , attacker),
+        player(OppAtkID , Opp , XOpp, YOpp, _),
+        role(TeamDefID, defender),
+        player(TeamDefID, Team , XDef,YDef, _),
+        role(TeamAtkID, attacker),
+        player(TeamAtkID, Team , XAtk,YAtk, _),
+
+        distance(XOpp,YOpp, XDef,YDef, DistDef2Opp),
+
+        (DistDef2Opp > 70 -> (PassToX = XDef, PassToY = YDef); (PassToX = XAtk, PassToY = YAtk)),
+
+        distance(PassToX, PassToY, Xp,Yp, Power),
+        Action = kick(PassToX,PassToY, Power)
+    )
     ).
 
-% [UNCHANGED] --- FIELD PLAYERS FALLBACKS ---
-% 5% chance to randomly adjust angle (makes them look alive). GKs ignore this now!
-decide_action(_, Action) :- random(R), R < 0.05, !, random_between(-10, 10, RandAngle), N is RandAngle / 10, Action = turn(N).
-% If a field player doesn't see the ball, spin to scan for it.
-decide_action(PlayerID, Action) :- \+ sensor:sense_ball(PlayerID, _, _), !, Action = turn(0.15).
+
+% ball not found -> spin
+decide_action(PlayerID, Action) :- \+ senseBall(PlayerID, _, _), !, Action = turn(0.15).
 
 
-% [UNCHANGED] 2. DEFENDER (Flanking to pass to attacker)
+% DF
 decide_action(PlayerID, Action) :-
     role(PlayerID, defender), !,
-    environment:player(PlayerID, Team, PX, PY, _), sensor:sense_ball(PlayerID, BX, BY),
+    player(PlayerID, Team, Xp, Yp, _), 
+    senseBall(PlayerID, Xb, Yb),
     
-    (Team == red -> OwnGoalX = 0, OwnGoalY = 300 ; OwnGoalX = 800, OwnGoalY = 300),
+    (Team == red -> XTg = 0, YTg = 300 ; XTg = 800, YTg = 300),
     
-    math_utils:distance(PX, PY, BX, BY, DistToBall),
-    math_utils:distance(BX, BY, OwnGoalX, OwnGoalY, BallToGoalDist),
+    distance(Xp, Yp, Xb, Yb, B2PDist),
+    distance(Xb, Yb, XTg, YTg, B2TgDist),
     
+    %find closest Atk
     findall(Dist-AX-AY, (
         role(AttackerID, attacker),
-        environment:player(AttackerID, Team, AX, AY, _),
-        math_utils:distance(BX, BY, AX, AY, Dist)
+        player(AttackerID, Team, AX, AY, _),
+        distance(Xb, Yb, AX, AY, Dist)
     ), AttackerDistances),
     
-    keysort(AttackerDistances, [_ClosestAttackerDist-TargetAX-TargetAY | _]),
+    keysort(AttackerDistances, [Dist2Target-TargetAX-TargetAY | _]),
     
-    (DistToBall < 25 ->
-        Action = kick(TargetAX, TargetAY, 25)
-    ; 
-        BallToGoalDist < 350 ->
-            math_utils:angle_to(BX, BY, TargetAX, TargetAY, AngleToAttacker),
-            ApproachAngle is AngleToAttacker + 3.14159,
-            StandoffX is BX + 45 * cos(ApproachAngle),
-            StandoffY is BY + 45 * sin(ApproachAngle),
-            math_utils:distance(PX, PY, StandoffX, StandoffY, DistToApproach),
-            
-            (DistToApproach < 20 ->
-                Action = goto(BX, BY)
-            ;
-                Action = goto(StandoffX, StandoffY)
-            )
-        ;
-            ScreenX is OwnGoalX + (BX - OwnGoalX) * 0.5, ScreenY is OwnGoalY + (BY - OwnGoalY) * 0.5,
-            Action = goto(ScreenX, ScreenY)
+    %if close to ball 
+    (B2PDist < 34 -> (Action = kick(TargetAX, TargetAY, Dist2Target)); 
+
+    %elif close to goal 
+    (B2TgDist < 350 ->
+         Action = flank(TargetAX, TargetAY , 30)
+    );
+            XScreen is XTg + (Xb - XTg) * 0.5, 
+            YScreen is YTg + (Yb - YTg) * 0.5,
+            Action = goto(XScreen, YScreen)
     ).
 
-% [UNCHANGED] 3. ATTACKER 
+%ATK
+
+avoidGk(PlayerID , TargetY):-
+    player(PlayerID, Team, Xp, Yp, _),
+    senseBall(PlayerID, Xb, Yb),
+    
+    (Team == red -> TargetTeam = blue, XOg = 800
+    ; TargetTeam = red,  XOg = 0),
+
+    role(GkID , goalkeeper),
+    player(GkID, TargetTeam , XGk, YGk, _),
+
+    UpperBorder is YGk - 25,
+    LowerBorder is YGk + 25,
+
+    angleTo(Xb,Yb,XOg,200 ,MaximumUpperAngle),
+    angleTo(Xb,Yb,XOg,400 ,MaximumLowerAngle),
+
+    angleTo(Xb,Yb,XGk,UpperBorder,MinimumUpperAngle),
+    angleTo(Xb,Yb,XGk,LowerBorder,MinimumLowerAngle),
+
+    angleDifference(MaximumUpperAngle,MinimumUpperAngle, UpperWindow),
+    angleDifference(MaximumLowerAngle,MinimumLowerAngle, LowerWindow),
+
+    (UpperWindow > LowerWindow -> middleAngle(MaximumUpperAngle,MinimumUpperAngle, ShootingAngle); middleAngle(MaximumLowerAngle,MinimumLowerAngle, ShootingAngle)),
+
+    YTemp is Yb + (XOg - Xb) * tan(ShootingAngle),
+    clamp(YTemp,200,400,TargetY).
+
 decide_action(PlayerID, Action) :-
     role(PlayerID, attacker),
-    environment:player(PlayerID, Team, PX, PY, _), sensor:sense_ball(PlayerID, BX, BY),
+    player(PlayerID, Team, Xp, Yp, _), senseBall(PlayerID, Xb, Yb),
     
-    (Team == red -> TargetTeam = blue, OwnGoalX = 0, OwnGoalY = 300, WaitX = 500 ; TargetTeam = red, OwnGoalX = 800, OwnGoalY = 300, WaitX = 300),
+    (Team == red -> TargetTeam = blue, XTg = 0, YTg = 300, XOg = 800, WaitX = 500 
+    ; TargetTeam = red, XTg = 800, YTg = 300, XOg = 0, WaitX = 300),
     
-    environment:goal(TargetTeam, GX, GY),
-    math_utils:distance(PX, PY, BX, BY, DistToBall),
-    math_utils:distance(BX, BY, OwnGoalX, OwnGoalY, BallToGoalDist),
+    goal(TargetTeam, XOg, YOg),
+    distance(Xp, Yp, Xb, Yb, B2PDist),
+    distance(Xb, Yb, XTg, YTg, B2TgDist),
+    distance(Xb, Yb, XOg, YTg, B2OgDist),
+    player(OppAttacker, TargetTeam,_,YTAtk, _),
+    role(OppAttacker, attacker),
+    player(OppDef, TargetTeam,XTDef, YTDef, _),
+    role(OppDef, defender),
+    field_size(_,H),
+
+    distance(Xb,Yb,XTDef , YTDef , Dist2Def),
     
-    (BallToGoalDist < 350 ->
-        Action = goto(WaitX, BY)
+    %if close to OG 
+    (B2TgDist < 350 ->
+       (((YTAtk < H/2) -> Yn is YTAtk + 300; Yn is YTAtk - 300),
+        Action = goto(WaitX, Yn))
     ;
-    DistToBall < 25 ->
-        Action = kick(GX, GY, 25)
+    %elif close to me close to opp G
+    (B2PDist < 35 , B2OgDist < 360) ->
+        ((Dist2Def > 60) ->
+            (Power is B2OgDist*1.2,
+            avoidGk(PlayerID,YTarget),
+            Action = kick(XOg, YTarget, Power)
+            );
+
+        %else
+            (((Yb < H/2) -> Yn = 2000 ; Yn = -1400),
+            Action = kick(XOg, Yn, 200)))
     ; 
-        math_utils:angle_to(BX, BY, GX, GY, AngleToGoal),
-        ApproachAngle is AngleToGoal + 3.14159,
-        AX is BX + 45 * cos(ApproachAngle),
-        AY is BY + 45 * sin(ApproachAngle),
-        math_utils:distance(PX, PY, AX, AY, DistToApproach),
-        
-        (DistToApproach < 20 ->
-            Action = goto(BX, BY)
-        ;
-            Action = goto(AX, AY)
-        )
-    ).
+    %else 
+        Action = flank(XOg, YOg, 30)
+    );true.
