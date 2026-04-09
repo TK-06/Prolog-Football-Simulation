@@ -113,7 +113,6 @@ update_pos_and_dir(ID, X, Y, Angle) :-
     send(LabelVis, x, LX), send(LabelVis, y, LY).
 
 game_loop(Window) :-
-    % Run the math loop multiple times based on current speed selection
     sim_steps(Steps),
     forall(between(1, Steps, _), (
         environment:match_time(Time),

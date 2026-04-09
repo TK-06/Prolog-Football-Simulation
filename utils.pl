@@ -1,19 +1,20 @@
-:- module(utils, [distance/5, angleTo/5, addNoise/3, angleDifference/3, signed_angle_diff/3, normalize_angle/2, random_range/3, middleAngle/3,clamp/4]).
+:- module(utils, [distance/5, angleTo/5, addNoise/3, angleDifference/3, signedAngleDiff/3, normalize_angle/2, random_range/3, middleAngle/3,clamp/4]).
 
 distance(X1, Y1, X2, Y2, D) :- 
-    D is sqrt((X2 - X1)**2 + (Y2 - Y1)**2).
+    D is sqrt((X1 - X2)**2 + (Y1 - Y2)**2).
 
 angleTo(X1, Y1, X2, Y2, A) :- 
     A is atan2(Y2 - Y1, X2 - X1).
 
 addNoise(Val, NoiseLevel, NoisyVal) :-
     random(R), 
-    Offset is (R * 2 * NoiseLevel) - NoiseLevel, NoisyVal is Val + Offset.
+    Offset is (2*R - 1) * NoiseLevel, 
+    NoisyVal is Val + Offset.
 
 angleDifference(A1, A2, Diff) :-
-    signed_angle_diff(A1, A2, SDiff), Diff is abs(SDiff).
+    signedAngleDiff(A1, A2, SDiff), Diff is abs(SDiff).
 
-signed_angle_diff(Current, Target, Diff) :-
+signedAngleDiff(Current, Target, Diff) :-
     Diff1 is Target - Current,
     Diff is Diff1 - 2 * pi * floor((Diff1 + pi) / (2 * pi)).
 
@@ -29,7 +30,6 @@ middleAngle(A, B, Mid) :-
         Mid is atan2(Y, X)
     ).
 
-% Generate a random float between Min and Max
 random_range(Min, Max, Val) :-
     random(R),
     Val is Min + R * (Max - Min).
