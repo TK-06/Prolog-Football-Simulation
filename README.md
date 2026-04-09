@@ -1,128 +1,117 @@
-# Prolog Football Simulation V2
+# Prolog RoboCup 3v3 Football Simulation
 
-A 5v5 football simulator built in SWI-Prolog with a simple XPCE GUI, role-based player AI, noisy perception, and lightweight ball physics.
-
-The project renders a live match between the Red and Blue teams on an `800 x 600` pitch. Every player is controlled by Prolog rules, and the simulation updates continuously through the main game loop.
-
-## Features
-
-- 10 autonomous players split into two 5-player teams
-- Distinct roles for goalkeeper, defenders, and attackers
-- Ball sensing with field-of-view limits and distance-based noise
-- Ball movement, friction, rebounds, scoring, and automatic kickoffs
-- Player collision avoidance plus overlap resolution
-- Adjustable simulation speed from the GUI
-- On-screen scoreboard, timer, facing direction, and player role labels
+A real-time, AI-driven 3v3 football simulation built entirely in Prolog. Two teams — Red and Blue — compete over a 90-second match on an 800x600 pixel pitch, with all player intelligence, physics, and rendering handled in SWI-Prolog using the XPCE GUI library.
 
 ## Requirements
 
-- [SWI-Prolog](https://www.swi-prolog.org/Download.html)
-- XPCE support enabled in your SWI-Prolog installation
+- [SWI-Prolog](https://www.swi-prolog.org/Download.html) (version 8.x or later)
+- XPCE GUI library (included in the standard SWI-Prolog Windows installer — ensure it is selected during setup)
 
-On Windows, XPCE is usually included with the standard SWI-Prolog installer.
+## Getting Started
 
-## Running The Project
-
-Open a terminal in the project folder and start SWI-Prolog:
+1. Clone or download this repository.
+2. Open a terminal in the project directory.
+3. Launch SWI-Prolog with the main file:
 
 ```bash
 swipl main.pl
 ```
 
-Then run:
+4. At the Prolog prompt, type:
 
 ```prolog
 ?- start.
 ```
 
-This opens the simulation window and starts the match.
+A window titled **Prolog RoboCup 3v3** will open and the match begins immediately.
 
 ## Controls
 
-- `stop`: closes the window and ends the simulation
-- `speed`: changes the simulation rate to `0.5x`, `1x`, `2x`, `4x`, or `8x`
+| Control | Action |
+|---|---|
+| **Speed menu** | Set simulation speed: 0.5x, 1x, 2x, 4x, 8x |
+| **Reset button** | Reset the match — resets positions, score, and timer |
+| **Stop button** | End the simulation and close the window |
 
-At speeds above `1x`, the program keeps the same render interval and performs multiple simulation steps per frame.
+## Teams and Roles
 
-## Match Rules
+Each team has 3 players. Kickoff team is chosen randomly at the start.
 
-- The field size is `800 x 600`
-- The left goal belongs to Red's side, and the right goal belongs to Blue's side
-- A goal is counted when the ball crosses inside the goal opening
-- After a goal, players and the ball reset for kickoff
-- The match timer starts at `270.0` seconds in the current codebase
+| Label | Role | Team |
+|---|---|---|
+| GK | Goalkeeper | Red (ID 1) |
+| DR | Defender | Red (ID 2) |
+| AR | Attacker | Red (ID 3) |
+| GK | Goalkeeper | Blue (ID 4) |
+| DB | Defender | Blue (ID 5) |
+| AB | Attacker | Blue (ID 6) |
 
-## AI Overview
-
-Each team has:
-
-- `GK`: goalkeeper
-- `D1`, `D2`: defenders
-- `A1`, `A2`: attackers
+## AI Behaviour
 
 ### Goalkeeper
+- **Default**: Patrols a large arc (radius 120) around the goal centre, tracking the ball's angle.
+- **Danger zone** (ball within 120 units of goal): Charges directly at the ball.
+- **Ball in possession**: Passes to the defender if the opponent attacker is far away (> 70 units), otherwise passes to own attacker.
 
-- Tracks the ball relative to its own goal
-- Rushes out when the ball enters the danger zone
-- Passes to the nearest defender when in possession
-- Repositions along a defensive arc in front of goal
+### Defender
+- **Ball in possession** (within 34 units): Passes forward to the nearest attacker.
+- **Ball near own goal** (within 400 units): Uses `flank` to approach the ball from behind and set up a pass.
+- **Ball far away**: Moves to a screening position halfway between own goal and the ball.
 
-### Defenders
+### Attacker
+- **Ball near own goal** (within 350 units): Holds a wide waiting position on the opponent's side, mirroring the opponent attacker's Y position.
+- **Ball in possession and near opponent goal**: Shoots using `avoidGk` to find the best angle around the goalkeeper. If the defender is close, lofts the ball over to the far post instead.
+- **Default**: Uses `flank` to approach the ball from the goal-side, ready to shoot.
 
-- Screen the space between the ball and their own goal
-- Move into flanking positions when the ball is in a dangerous area
-- Pass forward to the nearest attacker after winning the ball
+### avoidGk (Attacker helper)
+Calculates the largest open shooting window by comparing the angles to the top and bottom of the goal against the goalkeeper's body. The attacker shoots through the centre of the bigger gap.
 
-### Attackers
+## Physics
 
-- Move behind the ball relative to the target goal
-- Wait in attacking positions when the ball is deep in their own half
-- Shoot toward goal once close enough to kick
+- Ball velocity is damped each frame by friction (0.9)
+- The ball bounces off field walls and players
+- Goalpost corners deflect the ball back onto the pitch
+- Ball stops when speed drops below 0.2 units/frame
+- Special deflection: if both attackers from opposite teams are simultaneously near the ball, a small random spin is added
+- Players have collision detection; overlapping bodies are pushed apart each physics step
 
-## Perception Model
+## Player Stats
 
-The `sensor.pl` module gives players limited awareness:
+Each player is assigned randomised stats at the start of every match, scaled by role:
 
-- Players only detect objects inside a forward field of view
-- Ball position includes more noise as distance increases
-- Goal and teammate sensing also include noise
-- Goalkeepers bypass noisy ball sensing and read the real ball position directly
+| Role (ID mod 3) | Speed Range | Kick Power Range |
+|---|---|---|
+| Goalkeeper (mod 0) | 3.2 – 3.3 | 60 – 80 |
+| Defender (mod 2) | 2.6 – 3.0 | 60 – 80 |
+| Attacker (mod 1) | 2.4 – 2.8 | 60 – 80 |
 
-## Physics Model
+## Perception
 
-The `environment.pl` module handles the simulation state:
+Players use a **120-degree field of view**. The ball sensor adds distance-proportional noise (5% of distance), so far-away balls are reported less accurately. The goalkeeper bypasses the FOV sensor entirely and always knows the ball's true position.
 
-- Ball acceleration is applied from kicks
-- Velocity is damped by friction each update
-- The ball rebounds from walls and nearby players
-- Goal-edge collisions are handled around the mouth of the goal
-- Overlapping players are pushed apart to reduce clipping
+## Kick Accuracy
+
+Kick inaccuracy scales with how hard the kick is relative to the player's power stat. A kick at full power is the least accurate. If a player is not facing the target when kicking, they will `flank` into position instead of kicking.
+
+## Match End
+
+When the 90-second timer expires, the clock displays the result:
+
+- `MATCH OVER - Red Wins!`
+- `MATCH OVER - Blue Wins!`
+- `MATCH OVER - Tie!`
+
+Press **Reset** to start a new match without restarting the program.
 
 ## Project Structure
 
-```text
-main.pl          Entry point, GUI setup, render loop, controls
-environment.pl   World state, physics, scorekeeping, match timer
-ai.pl            Role-based decision logic for all players
-sensor.pl        Field-of-view checks and noisy sensing
-math_utils.pl    Distance, angles, normalization, randomness
 ```
-
-## Starting Point For Development
-
-If you want to extend the simulator, good next steps are:
-
-- tune movement, kick power, or friction values
-- add formations or more advanced team tactics
-- improve collision handling and ball possession logic
-- expose match settings such as field size or timer length
-- add logging or statistics for shots, passes, and possession
-
-## Notes
-
-- The window title in the current implementation is `Prolog RoboCup 5v5`
-- The simulation uses random player stats at the start of each match
-- If XPCE is missing, the program may load but fail when creating the GUI
+main.pl          Entry point, GUI rendering, game loop
+environment.pl   Game state, physics engine, scoring, actions
+ai.pl            AI decision-making per role
+sensor.pl        Simulated ball perception (FOV + noise)
+utils.pl         Math utilities (geometry, angles, noise, clamp)
+```
 
 ## Contributors
 
