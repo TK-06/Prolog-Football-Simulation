@@ -123,3 +123,9 @@ If you want to extend the simulator, good next steps are:
 - The window title in the current implementation is `Prolog RoboCup 5v5`
 - The simulation uses random player stats at the start of each match
 - If XPCE is missing, the program may load but fail when creating the GUI
+
+## Contributors
+
+- [TK-06](https://github.com/TK-06) - Developer
+- [chain2z](https://github.com/chain2z) - Developer
+- Claude by Anthropic — AI Assistant
